@@ -14,6 +14,7 @@ from .const import (
 from hatch_rest_api import RestIot, Restore, RestoreIot, RestoreV5, RestBaby
 from .media_rest_entity import MediaRestEntity
 from .media_riot_entity import MediaRiotEntity
+from .restore_entities import RestoreSound
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ def choose_media_entity(
     coordinator,
 ):
     if isinstance(rest_device, Restore):
-        # No media player until its sound controls are verified. Anything not
-        # matched here falls through to the Rest Mini/Plus player below.
-        return None
+        # Must stay before the fallback below, which builds a Rest Mini/Plus
+        # player for anything not matched.
+        return RestoreSound(coordinator=coordinator, thing_name=rest_device.thing_name)
     if isinstance(rest_device, RestIot | RestoreIot | RestoreV5 | RestBaby):
         return MediaRiotEntity(
             coordinator=coordinator, thing_name=rest_device.thing_name
