@@ -27,3 +27,5 @@ tts
 scenes.yaml
 scripts.yaml
 secrets.yaml
+# Reports written by scripts/probe_restore.py
+restore-probe-*.log
