@@ -19,7 +19,8 @@ from homeassistant.const import (
     EntityCategory,
 )
 from hatch_rest_api import RestPlus, RestIot, Restore
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
@@ -36,6 +37,7 @@ from .alarm import (
 )
 from .const import DOMAIN
 from .hatch_entity import HatchEntity
+from .restore_entities import RestoreAlarmRepeat, async_setup_restore_alarm_entities
 
 _LOGGER = logging.getLogger(__name__)
 ALARM_REPEAT_UNIQUE_ID_SUFFIX = "_repeat"
@@ -61,6 +63,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
                 )
             )
     async_add_entities(sensor_entities)
+    await async_setup_restore_alarm_entities(
+        hass, config_entry, coordinator, async_add_entities, RestoreAlarmRepeat, "sensor"
+    )
 
     alarm_entities_by_unique_id: dict[str, HatchAlarmRepeat] = {}
 
@@ -208,6 +213,16 @@ class HatchFirmwareVersion(HatchEntity, SensorEntity):
     @property
     def native_value(self) -> StateType | date | datetime | Decimal:
         return self.rest_device.firmware_version
+
+    @callback
+    def async_write_ha_state(self) -> None:
+        # The device card's firmware is fixed when the entities are created,
+        # usually before the device's first report has arrived; follow it here.
+        firmware = self.rest_device.firmware_version if self.rest_device else None
+        if firmware and self.hass is not None and self.device_entry is not None:
+            if self.device_entry.sw_version != firmware:
+                dr.async_get(self.hass).async_update_device(self.device_entry.id, sw_version=firmware)
+        super().async_write_ha_state()
 
 
 class HatchSignalStrength(HatchEntity, SensorEntity):
