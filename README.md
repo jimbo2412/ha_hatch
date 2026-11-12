@@ -15,7 +15,8 @@ A custom integration for Hatch Rest/Restore Sound Machines. This project is most
 - Rest+
 - Rest 2nd gen
 - Rest+ 2nd gen
-- Restore
+- Restore (1st gen, product `restoreIot`)
+- Restore (1st gen original, product `restore`) - experimental, see [Original Restore](#original-restore)
 - Restore 2
 - Restore 3
 - Restore 5
@@ -30,7 +31,8 @@ A custom integration for Hatch Rest/Restore Sound Machines. This project is most
 - turn rest plus on and off
 - turn clock on and off and adjust brightness (Rest+ 2nd gen/Restore 3) 
 - full clock display control - separate day/night brightness, clock mode (Always On / Off at Night / Always Off), on/off schedule times, and tap-to-show (Restore 5)
-- enable, disable, and edit wake times for existing alarms (Restore, Restore 2, Restore 3)
+- enable, disable, and edit wake times for existing alarms (Restore `restoreIot`, Restore 2, Restore 3)
+- start and stop the bedtime routine, and monitor what is playing, firmware and Wi-Fi signal (original Restore `restore`)
 - turn Toddler Lock on and off (Rest+ 2nd gen) 
 - monitor device charging status (Rest+ 2nd gen)
 
@@ -48,11 +50,21 @@ If you receive an error, please go through these steps;
 5. Click Download Diagnostics
 6. Attach both logs and diagnostics to your issue ticket.
 
+## Original Restore ##
+Hatch sold two first generation Restores, and they report different product codes to the Hatch cloud: `restoreIot` and the older `restore`. Both are supported, but differently. Once set up, the device page shows model `RestoreIot` or `Restore` respectively.
+
+The original Restore (`restore`) gets:
+* switch `Bedtime Routine`: on starts the first step of the bedtime routine set up in the Hatch app; off stops whatever is playing. It also shows on while anything started from the app is playing
+* sensor `Playing`: `none`, `routine` or `remote`, with the routine step as an attribute
+* diagnostic sensors `Firmware Version` and `Wifi Signal`, and the `Wifi` connectivity binary sensor
+
+Volume, light, sound selection, clock and alarm controls are not available for it yet, because its device protocol has only been confirmed for starting and stopping the routine. With debug logging on, every state report it sends is logged on a line starting `restore raw shadow state for`, and Download Diagnostics includes the combined state under `shadow_state`; attaching either to an issue helps add more.
+
 ## Usage ##
 You can now use the following services:
 * Rest+ 2nd gen: activate scene to start a defined favorite
   * if you add new favorites reload the integration to update available scenes or restart ha
-* Restore/Restore 2/Restore 3: use the alarm switch to enable or disable an existing alarm
+* Restore (`restoreIot`)/Restore 2/Restore 3: use the alarm switch to enable or disable an existing alarm
   * use the alarm wake time entity to change when the alarm sound starts; the sunrise light start shifts with it
   * when Hatch omits an alarm `endTime`, wake time is derived from `startTime` plus the alarm sunrise duration
   * automations can set wake time with the built-in `time.set_value` action, for example `time: "06:45:00"`
