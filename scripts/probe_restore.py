@@ -4,13 +4,18 @@
 Fork-only development tool for the restore work; HACS does not ship it.
 
 One login, then:
-  1. the product codes on the account, and the devices Hatch returns for them
+  1. the product codes on the account, and the devices Hatch returns, both
+     for the known product codes and with no product filter at all
   2. what the REST endpoints the other Restores use answer for this one
      (routines, alarms, sound and color content)
   3. the full device shadow over AWS IoT, as the Hatch app reads it, and then
      every change to it as it happens -- including the desired state the
      Hatch app writes when you change something there
   4. a command prompt, to re-read the shadow or try a write
+
+It prefers a device with product "restore", but will watch any device the
+account has, so it still helps when the Restore turns out to be listed under
+another product code.
 
 Nothing is written to the device unless you type a write command. The login
 is asked for at a hidden prompt and kept in memory only. Tokens, AWS keys and
@@ -88,16 +93,16 @@ MAC_PATTERN = re.compile(r"\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b")
 HELP = """
 Commands:
   get              print the whole shadow again
-  on               start the bedtime routine at step 1     (known to work)
-  off              stop whatever is playing                (known to work)
+  on               start the bedtime routine at step 1     (known to work on product restore)
+  off              stop whatever is playing                (known to work on product restore)
   vol <0-100>      EXPERIMENTAL: write desired sound.v
   bright <0-100>   EXPERIMENTAL: write desired color.i
   raw <json>       EXPERIMENTAL: write <json> as the desired state
   help             this list
   quit             disconnect and exit
 
-Changes print as they happen, so you can also just change things in the
-Hatch app and watch which keys move.
+Changes print as they happen, so you can also change things in the Hatch
+app or on the device itself and watch which keys move.
 """
 
 
@@ -194,15 +199,20 @@ def percent_to_iot(text: str) -> int:
     return round(percent / 100 * MAX_IOT_VALUE)
 
 
-def parse_command(line: str) -> tuple[str, dict | None, bool]:
-    """Return (command, desired state to write or None, whether it is experimental)."""
+def parse_command(line: str, product: str = "restore") -> tuple[str, dict | None, bool]:
+    """Return (command, desired state to write or None, whether it is experimental).
+
+    on and off are only known to work on product restore; on anything else
+    they are experimental like the rest.
+    """
     command, _, argument = line.strip().partition(" ")
     command = command.lower()
     argument = argument.strip()
+    proven = product == "restore"
     if command == "on":
-        return command, {"content": {"playing": "routine", "paused": False, "offset": 0, "step": 1}}, False
+        return command, {"content": {"playing": "routine", "paused": False, "offset": 0, "step": 1}}, not proven
     if command == "off":
-        return command, {"content": {"playing": "none", "paused": False, "offset": 0, "step": 0}}, False
+        return command, {"content": {"playing": "none", "paused": False, "offset": 0, "step": 0}}, not proven
     if command == "vol":
         return command, {"sound": {"v": percent_to_iot(argument)}}, True
     if command == "bright":
@@ -259,15 +269,15 @@ def summarize_content(payload):
     return payload
 
 
-async def probe_rest(report: Report, session: ClientSession, token: str, mac: str) -> None:
+async def probe_rest(report: Report, session: ClientSession, token: str, mac: str, product: str) -> None:
     probes = (
         ("routines (v2, types=routine)", "service/app/routine/v2/fetch", [("macAddress", mac), ("types", "routine")]),
         ("favorites (v2, no type)", "service/app/routine/v2/fetch", [("macAddress", mac)]),
         ("alarms (v3, types=alarm)", "service/app/routine/v3/fetch", [("macAddress", mac), ("types", "alarm")]),
         (
-            "sound and color content for product restore",
+            f"sound and color content for product {product}",
             "service/app/content/v1/fetchByProduct",
-            [("product", "restore"), ("contentTypes", "sound"), ("contentTypes", "color")],
+            [("product", product), ("contentTypes", "sound"), ("contentTypes", "color")],
         ),
     )
     for title, path, params in probes:
@@ -280,11 +290,12 @@ async def probe_rest(report: Report, session: ClientSession, token: str, mac: st
 
 
 class ShadowWatcher:
-    def __init__(self, report: Report, shadow_client, thing_name: str, label: str):
+    def __init__(self, report: Report, shadow_client, thing_name: str, label: str, product: str):
         self.report = report
         self.shadow_client = shadow_client
         self.thing_name = thing_name
         self.label = label
+        self.product = product
 
     def subscribe(self) -> None:
         thing = self.thing_name
@@ -393,15 +404,30 @@ async def connect_mqtt(report: Report, session: ClientSession, token: str, safe_
     return connection
 
 
-def pick_device(report: Report, restores: list[dict]) -> dict:
-    if len(restores) == 1:
-        return restores[0]
-    for index, device in enumerate(restores, start=1):
-        report.out(f"  {index}: {device.get('name')}")
+def device_list(report: Report, title: str, status: int, body) -> list[dict]:
+    payload = body.get("payload") if isinstance(body, dict) else None
+    devices = [device for device in payload or [] if isinstance(device, dict)]
+    for device in devices:
+        for key in ("macAddress", "thingName", "email"):
+            report.add_secret(device.get(key))
+    report.dump(
+        f"{title}: HTTP {status}",
+        [{key: device.get(key) for key in DEVICE_FIELDS} for device in devices]
+        if devices
+        else body,
+    )
+    return devices
+
+
+def pick_device(report: Report, candidates: list[dict]) -> dict:
+    if len(candidates) == 1:
+        return candidates[0]
+    for index, device in enumerate(candidates, start=1):
+        report.out(f"  {index}: {device.get('name')} (product {device.get('product')})")
     while True:
-        choice = input(f"Which Restore to watch [1-{len(restores)}]: ").strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(restores):
-            return restores[int(choice) - 1]
+        choice = input(f"Which device to watch [1-{len(candidates)}]: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(candidates):
+            return candidates[int(choice) - 1]
 
 
 async def command_loop(report: Report, watcher: ShadowWatcher) -> None:
@@ -413,7 +439,7 @@ async def command_loop(report: Report, watcher: ShadowWatcher) -> None:
         except EOFError:
             return
         try:
-            command, desired, experimental = parse_command(line)
+            command, desired, experimental = parse_command(line, watcher.product)
         except (ValueError, json.JSONDecodeError) as error:
             report.out(f"! {error}")
             continue
@@ -430,9 +456,8 @@ async def command_loop(report: Report, watcher: ShadowWatcher) -> None:
             continue
         report.out(f"> {command}: desired {json.dumps(desired)}")
         if experimental:
-            answer = await loop.run_in_executor(
-                None, input, "Experimental write, not known to work on this model. Send it? [y/N] "
-            )
+            report.out(f"  experimental: not known to work on product {watcher.product}")
+            answer = await loop.run_in_executor(None, input, "  send it? [y/N] ")
             if answer.strip().lower() != "y":
                 report.out("  not sent")
                 continue
@@ -470,30 +495,42 @@ async def main() -> None:
             "service/app/iotDevice/v2/fetch",
             [("iotProducts", product) for product in products],
         )
-        devices = (body.get("payload") if isinstance(body, dict) else None) or []
-        for device in devices:
-            for key in ("macAddress", "thingName", "email"):
-                report.add_secret(device.get(key))
-        report.dump(
-            f"devices for {', '.join(products)}: HTTP {status}",
-            [{key: device.get(key) for key in DEVICE_FIELDS} for device in devices],
-        )
+        devices = device_list(report, f"devices for {', '.join(products)}", status, body)
 
-        restores = [device for device in devices if device.get("product") == "restore"]
-        if not restores:
-            report.out("No device with product 'restore' on this account; nothing more to probe.")
+        # Without a product filter Hatch may list devices under codes nobody
+        # asks for; this is how an unknown code would show up.
+        await asyncio.sleep(REST_PAUSE_SECONDS)
+        status, body = await get(session, token, "service/app/iotDevice/v2/fetch")
+        unfiltered = device_list(report, "devices with no product filter", status, body)
+        known = {device.get("thingName") for device in devices}
+        devices += [device for device in unfiltered if device.get("thingName") not in known]
+
+        devices = [device for device in devices if device.get("thingName") and device.get("macAddress")]
+        if not devices:
+            report.out(
+                "Hatch returned no devices for this login. If the Restore was set up "
+                "under another Hatch account, run this again with that login."
+            )
             return
+        candidates = [device for device in devices if device.get("product") == "restore"]
+        if not candidates:
+            report.out("No device with product 'restore'; offering every device instead.")
+            candidates = devices
 
-        for device in restores:
-            report.out(f"=== REST endpoints for {device.get('name')}")
-            await probe_rest(report, session, token, device["macAddress"])
+        for device in candidates:
+            report.out(f"=== REST endpoints for {device.get('name')} (product {device.get('product')})")
+            await probe_rest(report, session, token, device["macAddress"], device.get("product", "restore"))
 
-        device = pick_device(report, restores)
+        device = pick_device(report, candidates)
         connection = await connect_mqtt(report, session, token, safe_email)
         loop = asyncio.get_running_loop()
         try:
             watcher = ShadowWatcher(
-                report, iotshadow.IotShadowClient(connection), device["thingName"], device.get("name", "Restore")
+                report,
+                iotshadow.IotShadowClient(connection),
+                device["thingName"],
+                device.get("name", "Restore"),
+                device.get("product", "restore"),
             )
             await loop.run_in_executor(None, watcher.subscribe)
             await loop.run_in_executor(None, watcher.request_shadow)
