@@ -50,6 +50,7 @@ REDACTED_KEYS = {
         "requestedMacAddress",
         "connectedMacAddress",
         "ssid",
+        "phoneId",
     )
 }
 MAC_PATTERN = re.compile(r"\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b")
@@ -69,6 +70,19 @@ def redact(data):
     if isinstance(data, list):
         return [redact(item) for item in data]
     return data
+
+
+def redact_device_names(path: str, body):
+    """Device lists carry the names people give devices, often a person's."""
+    if "iotDevice" not in path or not isinstance(body, dict):
+        return body
+    payload = body.get("payload")
+    if isinstance(payload, list):
+        body = {**body, "payload": [
+            {**device, "name": REDACTED} if isinstance(device, dict) and "name" in device else device
+            for device in payload
+        ]}
+    return body
 
 
 def parse_body(text: str | None):
@@ -128,6 +142,11 @@ class HatchCapture:
                     self.add_secret(payload.get("token"))
                     self.add_secret(payload.get("email"))
 
+        if isinstance(response_body, dict) and "iotDevice" in flow.request.path:
+            for device in response_body.get("payload") or []:
+                if isinstance(device, dict):
+                    self.add_secret(device.get("name"))
+        response_body = redact_device_names(flow.request.path, response_body)
         status = flow.response.status_code if flow.response else None
         record = {
             "time": datetime.now().isoformat(timespec="seconds"),

@@ -23,8 +23,8 @@ another product code.
 
 Nothing is written to the device unless you type a write command. The login
 is asked for at a hidden prompt and kept in memory only. Tokens, AWS keys and
-identifying values (email, MAC addresses, thing name, member id, headphone
-PIN) are redacted from everything printed and from the report file,
+identifying values (email, MAC addresses, thing name, device names, member
+id, headphone PIN) are redacted from everything printed and from the report file,
 restore-probe-<time>.log in the current directory.
 
 Run it in a throwaway container from the directory holding this file:
@@ -78,7 +78,8 @@ KNOWN_PRODUCTS = (
     "restoreV5",
 )
 # Device record fields worth showing; the rest identify the account or device.
-DEVICE_FIELDS = ("product", "name", "hardwareVersion", "createDate", "updateDate", "owner")
+# Device names are left out: people often name a device after someone.
+DEVICE_FIELDS = ("product", "hardwareVersion", "createDate", "updateDate", "owner")
 REDACTED_KEYS = {
     key.lower()
     for key in (
@@ -467,7 +468,7 @@ def device_list(report: Report, title: str, status: int, body) -> list[dict]:
     payload = body.get("payload") if isinstance(body, dict) else None
     devices = [device for device in payload or [] if isinstance(device, dict)]
     for device in devices:
-        for key in ("macAddress", "thingName", "email"):
+        for key in ("macAddress", "thingName", "email", "name"):
             report.add_secret(device.get(key))
     report.dump(
         f"{title}: HTTP {status}",
@@ -482,7 +483,10 @@ def pick_device(report: Report, candidates: list[dict]) -> dict:
     if len(candidates) == 1:
         return candidates[0]
     for index, device in enumerate(candidates, start=1):
-        report.out(f"  {index}: {device.get('name')} (product {device.get('product')})")
+        report.out(
+            f"  {index}: product {device.get('product')}, hardware {device.get('hardwareVersion')}, "
+            f"added {device.get('createDate')}"
+        )
     while True:
         choice = input(f"Which device to watch [1-{len(candidates)}]: ").strip()
         if choice.isdigit() and 1 <= int(choice) <= len(candidates):
@@ -779,7 +783,7 @@ async def main(run_test_pass: bool) -> None:
             candidates = devices
 
         for device in candidates:
-            report.out(f"=== REST endpoints for {device.get('name')} (product {device.get('product')})")
+            report.out(f"=== REST endpoints for the {device.get('product')} added {device.get('createDate')}")
             await probe_rest(report, session, token, device["macAddress"], device.get("product", "restore"))
 
         device = pick_device(report, candidates)
@@ -790,7 +794,7 @@ async def main(run_test_pass: bool) -> None:
                 report,
                 iotshadow.IotShadowClient(connection),
                 device["thingName"],
-                device.get("name", "Restore"),
+                device.get("product", "device"),
                 device.get("product", "restore"),
             )
             await loop.run_in_executor(None, watcher.subscribe)
