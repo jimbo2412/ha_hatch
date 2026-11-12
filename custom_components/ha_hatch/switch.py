@@ -25,6 +25,12 @@ from .alarm import (
 )
 from .const import DOMAIN
 from .hatch_entity import HatchEntity
+from .restore_entities import (
+    RestoreAlarmsSwitch,
+    RestoreAlarmSwitch,
+    RestoreClock24Hour,
+    async_setup_restore_alarm_entities,
+)
 
 _LOGGER = logging.getLogger(__name__)
 ALARM_UNIQUE_ID_SUFFIX = "_switch"
@@ -66,8 +72,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
                     coordinator=coordinator, thing_name=rest_device.thing_name
                 )
             )
+            entities.append(RestoreAlarmsSwitch(coordinator=coordinator, thing_name=rest_device.thing_name))
+            entities.append(RestoreClock24Hour(coordinator=coordinator, thing_name=rest_device.thing_name))
 
     async_add_entities(entities)
+    await async_setup_restore_alarm_entities(
+        hass, config_entry, coordinator, async_add_entities, RestoreAlarmSwitch, "switch"
+    )
 
     alarm_entities_by_unique_id: dict[str, HatchAlarmSwitch] = {}
 
