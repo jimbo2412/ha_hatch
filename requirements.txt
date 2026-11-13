@@ -1,3 +1,3 @@
 homeassistant==2025.1.0
 ruff==0.17.4
-hatch_rest_api @ git+https://github.com/jimbo2412/hatch_rest_api.git@c5233a8047b0ba3c60f6abfeed900740ff4a3a24
+hatch_rest_api @ git+https://github.com/jimbo2412/hatch_rest_api.git@80c54a03c3079081623543834b270b8862fe32d5
