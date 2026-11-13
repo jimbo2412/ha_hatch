@@ -65,7 +65,7 @@ Every control below was checked on a real original Restore before it was added.
 | light `Clock` | Clock display on/off and brightness |
 | switch `Clock 24-Hour`, select `Clock Mode`, time `Clock Turn On At` / `Clock Turn Off At` | 12/24-hour, and whether the clock turns off at night between those times |
 | switch `Alarms` | All alarms on or off, like the crossed-bell button underneath |
-| switch `Alarm 1`, time `Alarm 1 Time`, sensor `Alarm 1 Repeat` (one set per alarm) | Turn an alarm on or off, change its wake time, and see its repeat days. Its sound, volume and sunrise settings are attributes |
+| switch `Alarm 1`, time `Alarm 1 Wake Time`, sensor `Alarm 1 Repeat` (one set per alarm) | Turn an alarm on or off, change its wake time, and see its repeat days. Its sound, volume and sunrise settings are attributes |
 | sensors `Firmware Version`, `Wifi Signal`, binary sensor `Wifi` | Diagnostics |
 
 How it behaves:
