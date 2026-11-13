@@ -336,7 +336,7 @@ class RestorePlatformSetupTest(unittest.TestCase):
         saturday = self.entity("switch", f"{THING}_restore_alarm_1001_switch")
         self.assertEqual(weekday.name, "Bedroom Alarm 1")
         self.assertEqual(saturday.name, "Bedroom Alarm 2")
-        self.assertEqual(self.entity("time", f"{THING}_restore_alarm_1002_time").name, "Bedroom Alarm 1 Time")
+        self.assertEqual(self.entity("time", f"{THING}_restore_alarm_1002_time").name, "Bedroom Alarm 1 Wake Time")
 
     def test_light(self):
         light_entity = self.entity("light", f"{THING}_light")
@@ -509,7 +509,7 @@ class RestorePlatformSetupTest(unittest.TestCase):
             platform=DOMAIN, unique_id=f"{THING}_restore_alarm_1002_time"
         )
         target = services._alarm_target_from_entity_id(
-            registry, self.coordinator, "time.bedroom_alarm_1_time", raise_if_not_alarm=True
+            registry, self.coordinator, "time.bedroom_alarm_1_wake_time", raise_if_not_alarm=True
         )
         self.assertEqual(target, ((THING, "1002"), (self.restore, "1002")))
 

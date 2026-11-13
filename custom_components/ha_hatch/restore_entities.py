@@ -394,7 +394,7 @@ class RestoreAlarmSwitch(RestoreAlarmEntity, SwitchEntity):
 class RestoreAlarmTime(RestoreAlarmEntity, TimeEntity):
     _attr_icon = "mdi:alarm"
     unique_id_suffix = "_time"
-    name_suffix = " Time"
+    name_suffix = " Wake Time"
 
     @property
     def native_value(self) -> time | None:
